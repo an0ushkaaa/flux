@@ -1,4 +1,4 @@
-# Flux 🤖
+# Flux
 
 so I built this AI agent that trades crypto on its own. like fully autonomous — it wakes up every 30 minutes, checks the market, reads the news, thinks about what to do, and either buys, sells, or holds. no human in the loop.
 
