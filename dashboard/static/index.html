@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flux — AI Trading Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #080d14;
+      --surface:   #0e1620;
+      --surface2:  #141f2e;
+      --border:    #1e2d40;
+      --text:      #d4e0ee;
+      --muted:     #5a7290;
+      --green:     #00e57a;
+      --green-dim: #00873f;
+      --red:       #ff4d6a;
+      --red-dim:   #8b1a2c;
+      --yellow:    #f5c542;
+      --blue:      #3b82f6;
+      --mono:      'JetBrains Mono', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────── */
+    .page { max-width: 1320px; margin: 0 auto; padding: 24px 20px 48px; }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 28px;
+    }
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #fff;
+    }
+    header h1 span { color: var(--green); }
+    #last-updated {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Summary cards ────────────────────────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 900px)  { .cards { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px)  { .cards { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 20px 18px;
+    }
+    .card-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .card-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .card-sub .buy  { color: var(--green); }
+    .card-sub .sell { color: var(--red); }
+    .card-sub .hold { color: var(--muted); }
+    .pnl-pos { color: var(--green); }
+    .pnl-neg { color: var(--red); }
+
+    /* ── Section headings ─────────────────────────────────────────── */
+    .section { margin-bottom: 36px; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Canvas chart ─────────────────────────────────────────────── */
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      position: relative;
+    }
+    #pnl-canvas {
+      display: block;
+      width: 100%;
+      height: 220px;
+    }
+    #chart-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    /* ── Tables ───────────────────────────────────────────────────── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td {
+      padding: 10px 14px;
+      vertical-align: top;
+      color: var(--text);
+    }
+    .td-muted  { color: var(--muted); font-size: 11px; }
+    .td-mono   { font-family: var(--mono); }
+    .td-reason { max-width: 320px; font-size: 11px; color: var(--muted); word-break: break-word; }
+
+    /* Decision badge */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+    .badge-buy  { background: var(--green-dim); color: var(--green); }
+    .badge-sell { background: var(--red-dim);   color: var(--red);   }
+    .badge-hold { background: #1e2d40;           color: var(--muted); }
+
+    /* Tx link */
+    .tx-link {
+      color: var(--blue);
+      text-decoration: none;
+      font-size: 11px;
+    }
+    .tx-link:hover { text-decoration: underline; }
+
+    /* ── Status / loading ─────────────────────────────────────────── */
+    .status-row {
+      padding: 20px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    .status-err { color: var(--red); }
+  </style>
+</head>
+
+<body>
+<div class="page">
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <header>
+    <h1><span>Flux</span> — AI Trading Agent</h1>
+    <div id="last-updated">Connecting…</div>
+  </header>
+
+  <!-- ── Summary cards ─────────────────────────────────────────── -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">ETH Price</div>
+      <div class="card-value" id="eth-price">—</div>
+      <div class="card-sub" id="price-ts"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Trades</div>
+      <div class="card-value" id="total-trades">—</div>
+      <div class="card-sub" id="trade-breakdown"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">P&amp;L Snapshot</div>
+      <div class="card-value" id="pnl-value">—</div>
+      <div class="card-sub" id="pnl-sub">portfolio USD value</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Active Skill</div>
+      <div class="card-value" id="active-skill" style="font-size:14px; padding-top:4px;">—</div>
+      <div class="card-sub" id="skill-sub"></div>
+    </div>
+  </div>
+
+  <!-- ── P&L Chart ─────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-title">P&amp;L Over Time</div>
+    <div class="chart-wrap">
+      <canvas id="pnl-canvas"></canvas>
+      <div id="chart-empty" style="display:none;">No P&amp;L data yet.</div>
+    </div>
+  </div>
+
+  <!-- ── Recent Decisions ──────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-title">Recent Decisions</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Cycle</th>
+            <th>Decision</th>
+            <th>Reasoning</th>
+            <th>P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="decisions-body">
+          <tr><td colspan="5" class="status-row">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Trade Log ─────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-title">Trade Log</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Action</th>
+            <th>ETH Amount</th>
+            <th>Price</th>
+            <th>Tx Hash</th>
+            <th>Skill</th>
+          </tr>
+        </thead>
+        <tbody id="trades-body">
+          <tr><td colspan="6" class="status-row">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- .page -->
+
+<script>
+  'use strict';
+
+  /* ── Config ──────────────────────────────────────────────────── */
+  const API          = '';          // same origin; prefix with http://localhost:8000 for dev
+  const REFRESH_MS   = 60_000;
+  const SEPOLIA_URL  = 'https://sepolia.etherscan.io/tx/';
+
+  /* ── Helpers ─────────────────────────────────────────────────── */
+  function fmtUSD(n) {
+    if (n == null) return '—';
+    return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fmtETH(n) {
+    if (n == null) return '—';
+    return Number(n).toFixed(6) + ' ETH';
+  }
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'medium', hour12: false });
+  }
+  function truncate(str, len) {
+    if (!str) return '—';
+    return str.length > len ? str.slice(0, len) + '…' : str;
+  }
+  function badgeHtml(decision) {
+    const cls = { BUY: 'badge-buy', SELL: 'badge-sell', HOLD: 'badge-hold' }[decision] || 'badge-hold';
+    return `<span class="badge ${cls}">${decision || '—'}</span>`;
+  }
+  function txLink(hash) {
+    if (!hash || hash === 'N/A') return '<span class="td-muted">—</span>';
+    const short = hash.slice(0, 8) + '…' + hash.slice(-6);
+    return `<a class="tx-link" href="${SEPOLIA_URL}${hash}" target="_blank" rel="noopener">${short}</a>`;
+  }
+  function pnlHtml(val) {
+    if (val == null) return '<span class="td-muted">—</span>';
+    const cls = val >= 0 ? 'pnl-pos' : 'pnl-neg';
+    return `<span class="${cls}">${fmtUSD(val)}</span>`;
+  }
+
+  async function apiFetch(path) {
+    const res = await fetch(API + path);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /* ── Health / last-updated ───────────────────────────────────── */
+  async function refreshHealth() {
+    try {
+      const data = await apiFetch('/api/health');
+      document.getElementById('last-updated').textContent =
+        'Last updated: ' + fmtTime(data.timestamp);
+    } catch {
+      document.getElementById('last-updated').textContent = 'API unreachable';
+    }
+  }
+
+  /* ── Summary cards ───────────────────────────────────────────── */
+  async function refreshSummary() {
+    try {
+      const d = await apiFetch('/api/summary');
+
+      // ETH price
+      document.getElementById('eth-price').textContent = fmtUSD(d.eth_price_usd);
+      document.getElementById('price-ts').textContent =
+        d.price_timestamp ? fmtTime(d.price_timestamp) : '';
+
+      // Trades
+      document.getElementById('total-trades').textContent = d.total_trades ?? '0';
+      document.getElementById('trade-breakdown').innerHTML =
+        `<span class="buy">${d.buy_count} buys</span> &nbsp;` +
+        `<span class="sell">${d.sell_count} sells</span> &nbsp;` +
+        `<span class="hold">${d.hold_count} holds</span>`;
+
+      // P&L
+      const pnl = d.latest_pnl_snapshot;
+      const pnlEl = document.getElementById('pnl-value');
+      if (pnl == null) {
+        pnlEl.textContent = '—';
+        pnlEl.className = 'card-value';
+      } else {
+        pnlEl.textContent = fmtUSD(pnl);
+        pnlEl.className = 'card-value ' + (pnl >= 0 ? 'pnl-pos' : 'pnl-neg');
+      }
+
+      // Active skill — derive from summary or fall back to a label
+      const skillEl = document.getElementById('active-skill');
+      // The API doesn't expose ACTIVE_SKILL directly; read from the most recent trade row
+      // Populated separately in refreshTrades(); set placeholder here.
+      if (skillEl.textContent === '—') skillEl.textContent = 'Loading…';
+
+    } catch (e) {
+      document.getElementById('eth-price').textContent = 'Error';
+      document.getElementById('total-trades').textContent = 'Error';
+    }
+  }
+
+  /* ── P&L Chart ───────────────────────────────────────────────── */
+  async function refreshChart() {
+    const canvas  = document.getElementById('pnl-canvas');
+    const emptyEl = document.getElementById('chart-empty');
+    const ctx     = canvas.getContext('2d');
+
+    let points = [];
+    try {
+      points = await apiFetch('/api/pnl-chart');
+    } catch {
+      emptyEl.textContent = 'Error loading chart data.';
+      emptyEl.style.display = 'flex';
+      return;
+    }
+
+    if (!points || points.length === 0) {
+      emptyEl.style.display = 'flex';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    // Match canvas pixel size to CSS size
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = rect.width  * devicePixelRatio;
+    canvas.height = rect.height * devicePixelRatio;
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+
+    const W = rect.width;
+    const H = rect.height;
+    const PAD = { top: 16, right: 24, bottom: 44, left: 72 };
+    const plotW = W - PAD.left - PAD.right;
+    const plotH = H - PAD.top  - PAD.bottom;
+
+    const values = points.map(p => p.pnl);
+    const minV   = Math.min(...values);
+    const maxV   = Math.max(...values);
+    const rangeV = maxV - minV || 1;
+
+    function xOf(i)   { return PAD.left + (i / (points.length - 1 || 1)) * plotW; }
+    function yOf(val) { return PAD.top  + (1 - (val - minV) / rangeV) * plotH;    }
+
+    // Background
+    ctx.fillStyle = '#0e1620';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines (5 horizontal)
+    ctx.strokeStyle = '#1e2d40';
+    ctx.lineWidth   = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = PAD.top + (i / 4) * plotH;
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+    }
+
+    // Y-axis labels
+    ctx.fillStyle  = '#5a7290';
+    ctx.font       = `10px 'JetBrains Mono', monospace`;
+    ctx.textAlign  = 'right';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i <= 4; i++) {
+      const val = minV + (1 - i / 4) * rangeV;
+      const y   = PAD.top + (i / 4) * plotH;
+      ctx.fillText('$' + val.toFixed(0), PAD.left - 8, y);
+    }
+
+    // X-axis labels (show up to 6 evenly spaced)
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    const xStep = Math.max(1, Math.floor(points.length / 6));
+    for (let i = 0; i < points.length; i += xStep) {
+      const x   = xOf(i);
+      const lbl = fmtTime(points[i].timestamp).slice(0, 8); // date portion
+      ctx.fillText(lbl, x, H - PAD.bottom + 8);
+    }
+
+    // Gradient fill under line
+    const grad = ctx.createLinearGradient(0, PAD.top, 0, H - PAD.bottom);
+    grad.addColorStop(0,   'rgba(0,229,122,0.25)');
+    grad.addColorStop(1,   'rgba(0,229,122,0.00)');
+    ctx.beginPath();
+    ctx.moveTo(xOf(0), yOf(values[0]));
+    for (let i = 1; i < points.length; i++) ctx.lineTo(xOf(i), yOf(values[i]));
+    ctx.lineTo(xOf(points.length - 1), H - PAD.bottom);
+    ctx.lineTo(xOf(0), H - PAD.bottom);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = '#00e57a';
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = 'round';
+    ctx.moveTo(xOf(0), yOf(values[0]));
+    for (let i = 1; i < points.length; i++) ctx.lineTo(xOf(i), yOf(values[i]));
+    ctx.stroke();
+
+    // Dots at each point
+    ctx.fillStyle = '#00e57a';
+    for (let i = 0; i < points.length; i++) {
+      ctx.beginPath();
+      ctx.arc(xOf(i), yOf(values[i]), 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* ── Decisions table ─────────────────────────────────────────── */
+  async function refreshDecisions() {
+    const tbody = document.getElementById('decisions-body');
+    try {
+      const rows = await apiFetch('/api/decisions?limit=10');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="status-row">No decisions yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td class="td-muted">${fmtTime(r.timestamp)}</td>
+          <td class="td-muted">#${r.cycle_number ?? '—'}</td>
+          <td>${badgeHtml(r.final_decision)}</td>
+          <td class="td-reason">${truncate(r.full_reasoning, 100)}</td>
+          <td>${pnlHtml(r.pnl_snapshot)}</td>
+        </tr>`).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="5" class="status-row status-err">Error loading decisions.</td></tr>';
+    }
+  }
+
+  /* ── Trades table ────────────────────────────────────────────── */
+  async function refreshTrades() {
+    const tbody = document.getElementById('trades-body');
+    try {
+      const rows = await apiFetch('/api/trades?limit=10');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="status-row">No trades yet.</td></tr>';
+        return;
+      }
+
+      // Update active skill card from the most recent trade row
+      const latestSkill = rows[0]?.skill_used;
+      if (latestSkill) {
+        const skillEl = document.getElementById('active-skill');
+        skillEl.textContent = latestSkill.replace(/_/g, ' ');
+        document.getElementById('skill-sub').textContent = latestSkill + '.txt';
+      }
+
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td class="td-muted">${fmtTime(r.timestamp)}</td>
+          <td>${badgeHtml(r.action)}</td>
+          <td class="td-mono">${fmtETH(r.amount_eth)}</td>
+          <td class="td-mono">${fmtUSD(r.price_at_trade)}</td>
+          <td>${txLink(r.tx_hash)}</td>
+          <td class="td-muted">${r.skill_used ? r.skill_used.replace(/_/g, ' ') : '—'}</td>
+        </tr>`).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="6" class="status-row status-err">Error loading trades.</td></tr>';
+    }
+  }
+
+  /* ── Full refresh ────────────────────────────────────────────── */
+  async function refreshAll() {
+    await Promise.allSettled([
+      refreshHealth(),
+      refreshSummary(),
+      refreshChart(),
+      refreshDecisions(),
+      refreshTrades(),
+    ]);
+  }
+
+  /* ── Re-draw chart on resize ─────────────────────────────────── */
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(refreshChart, 200);
+  });
+
+  /* ── Boot ────────────────────────────────────────────────────── */
+  refreshAll();
+  setInterval(refreshAll, REFRESH_MS);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+anthropic
+google-genai
+requests
+web3
+psycopg2-binary
+pgvector
+fastapi
+uvicorn
+python-dotenv
+apscheduler
+sqlalchemy
