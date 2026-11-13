@@ -1,36 +1,36 @@
 # Flux
 
-so I built this AI agent that trades crypto on its own. like fully autonomous — it wakes up every 30 minutes, checks the market, reads the news, thinks about what to do, and either buys, sells, or holds. no human in the loop.
+Flux is an autonomous AI trading agent built on top of Claude (Anthropic). It runs on a 30-minute cycle — fetching live market data, reading crypto news, searching its own memory for similar past conditions, and making a BUY, SELL, or HOLD decision without any human input. All trades are executed on Ethereum's Sepolia testnet.
 
-the whole point was to learn how agentic AI actually works in practice, not just theory. and honestly it ended up being one of the most interesting things i've built.
+The main goal of this project was to understand how agentic AI systems work in practice — specifically the agentic loop, tool use, and RAG memory. It ended up being a full-stack project with a real-time dashboard, vector database, and on-chain transaction execution.
 
 ---
 
-## what it actually does
+## What it does
 
-every 30 minutes flux does this on its own:
+Every 30 minutes, Flux runs this cycle automatically:
 
 ```
-checks ETH price + volume (CoinGecko)
+Fetches ETH price + volume (CoinGecko)
         ↓
-reads crypto news + fear & greed index
+Reads crypto news + fear & greed sentiment
         ↓
-checks wallet balance (Etherscan)
+Checks wallet balance (Etherscan)
         ↓
-searches its own memory for similar past market conditions
+Searches memory for similar past market conditions
         ↓
-Claude thinks through everything...
+Claude reasons through everything...
         ↓
 BUY / SELL / HOLD
         ↓
-logs everything to the database + dashboard updates
+Logs decision to database → dashboard updates
 ```
 
-the cool part is claude doesn't just follow hardcoded rules. it actually reasons through the data, compares it to what happened in the past, and makes a judgment call. the trading strategy (aggressive vs conservative) is just a text file injected into the system prompt — so swapping strategies is literally changing one env variable.
+The trading strategy is a plain text file injected into Claude's system prompt. Swapping strategies is just changing one environment variable — no code changes needed.
 
 ---
 
-## the architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -69,148 +69,133 @@ the cool part is claude doesn't just follow hardcoded rules. it actually reasons
 
 ---
 
-## the agentic loop (the interesting bit)
+## The Agentic Loop
 
-this is what i actually learned building this. the agent isn't a chain of function calls — it's claude in a while loop deciding what to do next:
+This is the core of the project. Claude runs in a while loop, deciding which tools to call and in what order:
 
-1. claude gets the initial message: *"analyze ETH and make a trading decision"*
-2. claude decides it needs market data → calls `get_market_data`
-3. gets the result → decides it needs news → calls `get_crypto_news`
-4. gets that → searches memory → calls `search_memory`
-5. now has enough context → calls `execute_trade`
-6. loop ends
+1. Claude receives: *"Analyze ETH and make a trading decision"*
+2. Calls `get_market_data` → gets price, volume, 24h change
+3. Calls `get_crypto_news` → gets headlines and sentiment score
+4. Calls `get_wallet_status` → checks available balance
+5. Calls `search_memory` → retrieves similar past market conditions
+6. Reasons through everything → calls `execute_trade`
+7. Loop ends
 
-claude drives the whole thing. the code just responds to whatever claude asks for. this is the ReAct pattern (reason → act → reason → act) which is basically how every serious AI agent is built right now.
-
----
-
-## RAG memory
-
-every cycle, flux saves a snapshot of the market to postgres as a vector embedding (3072 dimensions via gemini). before claude makes a decision, it searches those past snapshots for similar market conditions using cosine similarity.
-
-so claude can literally see: *"last time ETH dropped 3% with bearish news, here's what happened"*
-
-this is what gives the agent memory across cycles. without this it would start fresh every 30 minutes with no context.
+Claude decides what to call and when — the code just executes whatever Claude requests and returns the result. This is the ReAct pattern (Reason → Act → Reason → Act) which is the foundation of most production AI agents today.
 
 ---
 
-## tech stack
+## RAG Memory
 
-| thing | what it does |
-|-------|-------------|
-| Claude claude-opus-4-5 | the brain — reasoning and decisions |
-| Gemini gemini-embedding-001 | converts market snapshots to vectors |
-| pgvector | semantic similarity search in postgres |
-| PostgreSQL (Neon) | stores everything |
-| CoinGecko API | live ETH price, volume, market cap |
-| CoinDesk + Cointelegraph RSS | crypto news headlines |
-| Alternative.me | fear & greed index for sentiment |
-| Etherscan API | wallet balance + on-chain history |
-| Web3.py + Alchemy | signing + broadcasting transactions |
-| FastAPI | dashboard REST API |
-| APScheduler | runs the agent every 30 min |
-| SQLAlchemy Core | database interactions |
-| python-dotenv | environment config |
+After every cycle, Flux saves a snapshot of the market to PostgreSQL as a 3072-dimensional vector embedding (via Gemini). Before each decision, Claude searches those past snapshots for similar market conditions using cosine similarity via pgvector.
+
+This gives the agent persistent memory across cycles — it can reference what happened the last time ETH dropped 3% with bearish sentiment, and factor that into the current decision.
 
 ---
 
-## project structure
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| AI reasoning | Claude claude-opus-4-5 (Anthropic) |
+| Embeddings | Gemini gemini-embedding-001 (Google) |
+| Vector search | pgvector (PostgreSQL extension) |
+| Database | PostgreSQL via Neon |
+| Market data | CoinGecko API |
+| News | CoinDesk + Cointelegraph RSS |
+| Sentiment | Alternative.me Fear & Greed Index |
+| On-chain data | Etherscan API |
+| Blockchain | Web3.py + Alchemy RPC (Sepolia) |
+| Backend API | FastAPI |
+| Scheduler | APScheduler |
+| ORM | SQLAlchemy Core |
+| Config | python-dotenv |
+
+---
+
+## Project Structure
 
 ```
 flux/
   agent/
-    agent.py              ← the main loop
-    tool_definitions.py   ← tells claude what tools exist
-    tool_dispatcher.py    ← routes tool calls to python functions
+    agent.py              ← core agentic loop
+    tool_definitions.py   ← Claude tool schemas
+    tool_dispatcher.py    ← routes tool calls to Python functions
 
   tools/
-    coingecko.py          ← market data
-    news.py               ← rss + sentiment
+    coingecko.py          ← market data fetching
+    news.py               ← RSS news + sentiment
     etherscan.py          ← wallet data
-    trader.py             ← web3 trade execution
+    trader.py             ← Web3 trade execution
     skills_loader.py      ← loads strategy files
 
   memory/
-    database.py           ← sqlalchemy tables + pgvector
-    embeddings.py         ← gemini embedding calls
-    store.py              ← save + retrieve market snapshots
+    database.py           ← SQLAlchemy tables + pgvector setup
+    embeddings.py         ← Gemini embedding generation
+    store.py              ← save and retrieve market snapshots
 
   skills/
     conservative_dip_buy.txt
     aggressive_momentum.txt
 
   dashboard/
-    api.py                ← fastapi endpoints
-    static/index.html     ← the whole dashboard UI
+    api.py                ← FastAPI endpoints
+    static/index.html     ← dashboard UI (single file, no frameworks)
 
   main.py                 ← entry point
-  scheduler.py            ← 30 min loop
-  config.py               ← env vars
-  test_tools.py           ← integration tests
-  run_once.py             ← run one cycle manually
+  scheduler.py            ← 30-minute loop
+  config.py               ← environment variables
+  test_tools.py           ← integration test suite
+  run_once.py             ← run a single cycle manually
 ```
 
 ---
 
-## running it
+## Running It
 
 ```bash
-# 1. copy env and fill in your keys
+# 1. copy env template and fill in your keys
 cp .env.example .env
 
-# 2. install deps
+# 2. install dependencies
 pip install -r requirements.txt
 
-# 3. test everything works
+# 3. verify everything is working
 python test_tools.py
 
-# 4. run one cycle manually first
+# 4. run a single cycle to test
 python run_once.py
 
-# 5. start the full thing
+# 5. start the full system
 python main.py
 ```
 
-dashboard runs at `http://localhost:8000`
+Dashboard available at `http://localhost:8000`
 
 ---
 
-## switching trading strategies
+## Switching Strategies
 
-in `.env`:
+Change `ACTIVE_SKILL` in `.env`:
+
 ```
-ACTIVE_SKILL=conservative_dip_buy   # cautious, buys dips
-ACTIVE_SKILL=aggressive_momentum    # rides uptrends
+ACTIVE_SKILL=conservative_dip_buy   # buys dips, preserves capital
+ACTIVE_SKILL=aggressive_momentum    # rides uptrends, higher risk
 ```
 
-restart and it picks up the new strategy. the strategies are just `.txt` files in `skills/` — you can write your own.
+Restart and the new strategy takes effect. Strategies are plain `.txt` files in `skills/` — you can write your own without touching any code.
 
 ---
 
-## what works / what doesn't
+## Keys Required
 
-**works:**
-- full AI reasoning loop with tool use
-- RAG memory across cycles
-- live market data + news
-- dashboard with P&L chart + decision log
-- auto runs every 30 min
-
-**doesn't work yet:**
-- actual trade execution (need Sepolia testnet ETH — faucets are annoying)
-- only tracks ETH for now
-- no backtesting
-
----
-
-## keys you need
-
-get these and put them in `.env`:
-
-- `ANTHROPIC_API_KEY` → console.anthropic.com
-- `GEMINI_API_KEY` → aistudio.google.com
-- `COINGECKO_API_KEY` → coingecko.com/api
-- `ETHERSCAN_API_KEY` → etherscan.io/apis
-- `DATABASE_URL` → neon.tech (free postgres with pgvector)
-- `ETH_RPC_URL` → alchemy.com (free, use Sepolia)
-- `WALLET_ADDRESS` + `WALLET_PRIVATE_KEY` → MetaMask, new account, Sepolia network
+| Key | Where to get it |
+|-----|----------------|
+| `ANTHROPIC_API_KEY` | console.anthropic.com |
+| `GEMINI_API_KEY` | aistudio.google.com |
+| `COINGECKO_API_KEY` | coingecko.com/api |
+| `ETHERSCAN_API_KEY` | etherscan.io/apis |
+| `DATABASE_URL` | neon.tech |
+| `ETH_RPC_URL` | alchemy.com (Sepolia) |
+| `WALLET_ADDRESS` | MetaMask, Sepolia network |
+| `WALLET_PRIVATE_KEY` | MetaMask → Account Details → Export Private Key |
